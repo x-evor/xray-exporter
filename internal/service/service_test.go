@@ -158,3 +158,33 @@ func TestSnapshotContractJSON(t *testing.T) {
 		}
 	}
 }
+
+func TestNormalizeSnapshotAggregatesByUUIDAndInboundTag(t *testing.T) {
+	svc := New(
+		"jp-node",
+		"prod",
+		time.Minute,
+		stubCounterSource{counters: []model.RawCounter{
+			{UUID: "acct-1", InboundTag: "premium", Direction: "uplink", Value: 10},
+			{UUID: "acct-1", InboundTag: "premium", Direction: "uplink", Value: 10},
+			{UUID: "acct-1", InboundTag: "premium", Direction: "downlink", Value: 20},
+			{UUID: "acct-1", InboundTag: "basic", Direction: "uplink", Value: 5},
+			{UUID: "acct-1", InboundTag: "basic", Direction: "downlink", Value: 6},
+		}},
+		stubIdentitySource{identities: map[string]model.Identity{
+			"acct-1": {UUID: "acct-1", Email: "user@example.com"},
+		}},
+	)
+
+	if err := svc.Collect(context.Background()); err != nil {
+		t.Fatalf("collect: %v", err)
+	}
+
+	snapshot := svc.Snapshot()
+	if len(snapshot.Samples) != 2 {
+		t.Fatalf("expected 2 samples after uuid+inbound aggregation, got %d", len(snapshot.Samples))
+	}
+	if snapshot.Samples[0].InboundTag != "basic" || snapshot.Samples[1].InboundTag != "premium" {
+		t.Fatalf("unexpected sample ordering %#v", snapshot.Samples)
+	}
+}
